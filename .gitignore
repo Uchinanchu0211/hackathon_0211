@@ -1,0 +1,4 @@
+node_modules
+google-cloud-sdk
+.DS_Store
+.env
