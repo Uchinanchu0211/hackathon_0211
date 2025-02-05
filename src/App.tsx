@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { ReceiptAnalysis } from './components/ReceiptAnalysis';
 import { ReceiptHistory } from './components/ReceiptHistory';
@@ -72,7 +72,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center space-x-2">
             <ReceiptScanner className="w-8 h-8 text-blue-500" />
-            <h1 className="text-2xl font-bold text-gray-900">領収書マネージャー</h1>
+            <h1 className="text-2xl font-bold text-gray-900">レシートぽん！</h1>
           </div>
         </div>
       </header>
@@ -88,7 +88,7 @@ function App() {
             }`}
           >
             <FileText className="w-5 h-5" />
-            <span>領収書アップロード</span>
+            <span>レシートアップロード</span>
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -99,7 +99,7 @@ function App() {
             }`}
           >
             <History className="w-5 h-5" />
-            <span>履歴・分析</span>
+            <span>履歴</span>
           </button>
         </div>
 
