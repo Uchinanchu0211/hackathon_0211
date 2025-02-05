@@ -112,7 +112,7 @@ function App() {
             {isProcessing && (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="mt-4 text-gray-600">領収書を解析中...</p>
+                <p className="mt-4 text-gray-600">レシートを解析中...</p>
               </div>
             )}
 
