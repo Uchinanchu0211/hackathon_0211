@@ -1,31 +1,30 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import { FileUpload } from './components/FileUpload';
 import { ReceiptAnalysis } from './components/ReceiptAnalysis';
 import { ReceiptHistory } from './components/ReceiptHistory';
 import { Receipt, ReceiptItem } from './types';
 import { Receipt as ReceiptScanner, FileText, History } from 'lucide-react';
 
-// モックデータ生成
-const mockAnalyzeReceipt = async (file: File): Promise<Receipt> => {
-  // 実際のアプリケーションではGoogle Cloud Document AIなどと連携
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const mockItems: ReceiptItem[] = [
-        { id: '1', name: 'コーヒー', price: 500, category: 'unclassified' },
-        { id: '2', name: 'ノートPC', price: 150000, category: 'unclassified' },
-        { id: '3', name: '文具セット', price: 2000, category: 'unclassified' },
-      ];
+// Firebase Storage へのアップロード関数
+const uploadToCloudStorage = async (file: File): Promise<string> => {
+  try {
+    const response = await axios.post(
+      `https://storage.googleapis.com/upload/storage/v1/b/save-reciept/o?uploadType=media&name=${file.name}`,
+      file,
+      {
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_ACCESS_TOKEN}`, // Vite環境変数から認証トークンを取得
+          'Content-Type': file.type // ファイルのMIMEタイプを指定
+        },
+      }
+    );
 
-      resolve({
-        id: Math.random().toString(36).substr(2, 9),
-        imageUrl: URL.createObjectURL(file),
-        date: new Date().toLocaleDateString(),
-        totalAmount: mockItems.reduce((sum, item) => sum + item.price, 0),
-        items: mockItems,
-        status: 'analyzed'
-      });
-    }, 1500);
-  });
+    return response.data.mediaLink; // アップロードされたファイルのURLを返す
+  } catch (error) {
+    console.error('Error uploading to Cloud Storage:', error);
+    throw new Error('Upload to Cloud Storage failed');
+  }
 };
 
 function App() {
@@ -38,32 +37,13 @@ function App() {
     setIsProcessing(true);
     try {
       const file = files[0];
-      const analyzedReceipt = await mockAnalyzeReceipt(file);
-      setCurrentReceipt(analyzedReceipt);
-      setReceipts(prev => [analyzedReceipt, ...prev]);
+      const fileUrl = await uploadToCloudStorage(file);
+      console.log('File uploaded to:', fileUrl);
     } catch (error) {
-      console.error('Receipt analysis failed:', error);
+      console.error('File upload failed:', error);
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleUpdateCategory = (itemId: string, category: 'business' | 'personal') => {
-    if (!currentReceipt) return;
-
-    const updatedReceipt = {
-      ...currentReceipt,
-      items: currentReceipt.items.map(item =>
-        item.id === itemId ? { ...item, category } : item
-      )
-    };
-
-    setCurrentReceipt(updatedReceipt);
-    setReceipts(prev =>
-      prev.map(receipt =>
-        receipt.id === updatedReceipt.id ? updatedReceipt : receipt
-      )
-    );
   };
 
   return (
@@ -112,15 +92,8 @@ function App() {
             {isProcessing && (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="mt-4 text-gray-600">レシートを解析中...</p>
+                <p className="mt-4 text-gray-600">領収書をアップロード中...</p>
               </div>
-            )}
-
-            {currentReceipt && !isProcessing && (
-              <ReceiptAnalysis
-                receipt={currentReceipt}
-                onUpdateCategory={handleUpdateCategory}
-              />
             )}
           </div>
         )}
