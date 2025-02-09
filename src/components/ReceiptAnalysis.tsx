@@ -1,6 +1,5 @@
-import React from 'react';
-import { Receipt, ReceiptItem } from '../types';
-import { Calendar, DollarSign, Tag } from 'lucide-react';
+import { Receipt } from '../types';
+import { Calendar, DollarSign } from 'lucide-react';
 
 interface ReceiptAnalysisProps {
   receipt: Receipt;

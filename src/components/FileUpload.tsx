@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, Camera } from 'lucide-react';
 
@@ -32,7 +32,7 @@ export function FileUpload({ onUpload }: FileUploadProps) {
             写真を選択
           </p>
           <p className="text-sm text-blue-600">
-            ライブラリからレシートの写真を選択
+            ライブラリから領収書の写真を選択
           </p>
         </button>
       </div>
@@ -47,7 +47,7 @@ export function FileUpload({ onUpload }: FileUploadProps) {
         <div className="flex flex-col items-center justify-center text-gray-600">
           <Upload className="w-12 h-12 mb-4" />
           <p className="text-lg font-medium mb-2">
-            {isDragActive ? 'ドロップしてアップロード' : 'レシートをドラッグ＆ドロップ'}
+            {isDragActive ? 'ドロップしてアップロード' : '領収書をドラッグ＆ドロップ'}
           </p>
           <button
             onClick={open}

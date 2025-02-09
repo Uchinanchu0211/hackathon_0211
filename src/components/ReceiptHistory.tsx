@@ -20,7 +20,7 @@ export function ReceiptHistory({ receipts }: ReceiptHistoryProps) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">履歴</h2>
+      <h2 className="text-2xl font-bold">領収書履歴</h2>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="bg-blue-50 p-4 rounded-lg">
