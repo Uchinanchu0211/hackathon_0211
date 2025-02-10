@@ -248,6 +248,7 @@ function App() {
   const [processedReceipts, setProcessedReceipts] = useState<ProcessedReceipt[]>([]);
   const [currentReceiptId, setCurrentReceiptId] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // コンポーネントマウント時に処理済みレシートを取得
   useEffect(() => {
@@ -269,10 +270,12 @@ function App() {
   useReceiptPolling(currentReceiptId, (processedReceipt) => {
     setCurrentReceipt(processedReceipt);
     fetchProcessedReceiptsFromFirestore().then(setProcessedReceipts);
+    setIsProcessing(false);
   });
 
   const handleFileUpload = async (files: File[]) => {
     try {
+      setIsProcessing(true);
       const file = files[0];
       console.log('Uploading file:', file.name);
       
@@ -282,7 +285,7 @@ function App() {
 
       // ファイルアップロード後、Firestoreのドキュメントを監視
       let retryCount = 0;
-      const maxRetries = 30; // 最大60秒待機
+      const maxRetries = 30;
 
       const checkForReceipt = async () => {
         const receiptId = await fetchLatestReceipt(file.name);
@@ -304,11 +307,12 @@ function App() {
 
       checkForReceipt().catch(error => {
         console.error('Error during receipt processing:', error);
-        // エラー処理
+        setIsProcessing(false);
       });
 
     } catch (error) {
       console.error('Error during file upload:', error);
+      setIsProcessing(false);
     }
   };
 
@@ -374,13 +378,25 @@ function App() {
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div>
-            <FileUpload onUpload={handleFileUpload} />
-            {currentReceipt && (
-              <ReceiptAnalysis 
-                receipt={currentReceipt}
-                onCategorize={handleCategorize}
-                isProcessing={false}
-              />
+            {isProcessing ? (
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">レシートを解析中...</p>
+                  <p className="text-sm text-gray-500">処理に少々時間がかかる場合があります</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <FileUpload onUpload={handleFileUpload} />
+                {currentReceipt && (
+                  <ReceiptAnalysis 
+                    receipt={currentReceipt}
+                    onCategorize={handleCategorize}
+                    isProcessing={false}
+                  />
+                )}
+              </>
             )}
           </div>
           <div>
