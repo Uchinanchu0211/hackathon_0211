@@ -182,69 +182,69 @@ function App() {
       }
     };
     
-    loadReceipts();
-  }, []);
+    // 履歴タブが選択されている時のみデータを読み込む
+    if (activeTab === 'history') {
+      loadReceipts();
+    }
+  }, [activeTab]); // activeTabの変更時にも実行
 
   const handleUpload = async (files: File[]) => {
     setIsProcessing(true);
+    setSelectedReceipt(null);
+
     try {
       const file = files[0];
       console.log('Uploading file:', file.name, 'Type:', file.type);
 
       const fileUrl = await uploadToCloudStorage(file);
       console.log('File uploaded to:', fileUrl);
-      
-      // 最新のレシートを選択状態にする（ローディング表示のため）
-      setSelectedReceipt({ 
-        id: 'loading',
-        items: [],
-        store_name: '',
-        total_amount: 0,
-        metadata: {
-          processedAt: new Date().toISOString(),
-          status: 'processing',
-          updatedAt: new Date().toISOString()
-        },
-        originalFile: {
-          bucket: '',
-          name: '',
-          path: ''
-        },
-        status: 'processing'
-      });
-      
-      // Cloud Functionsの処理を待つ
-      let retryCount = 0;
-      const maxRetries = 10;
-      const checkForReceipt = async () => {
-        try {
-          const updatedReceipts = await fetchReceiptsFromFirestore();
-          const latestReceipt = updatedReceipts[0];
+
+      // Firestoreのデータを監視する関数
+      const waitForFirestoreData = async (fileName: string): Promise<Receipt | null> => {
+        let retryCount = 0;
+        const maxRetries = 30; // 最大60秒待機（2秒 × 30回）
+        const filePath = `gs://save-reciept/${fileName}`;
+
+        while (retryCount < maxRetries) {
+          console.log(`Checking Firestore... (attempt ${retryCount + 1}/${maxRetries})`);
+          const receipts = await fetchReceiptsFromFirestore();
           
-          if (latestReceipt && latestReceipt.status === 'processed') {
-            const updatedProcessedReceipts = await fetchProcessedReceiptsFromFirestore();
-            setProcessedReceipts(updatedProcessedReceipts);
-            setSelectedReceipt(latestReceipt);
-            setIsProcessing(false);
-          } else if (retryCount < maxRetries) {
-            retryCount++;
-            setTimeout(checkForReceipt, 2000);
-          } else {
-            throw new Error('レシートの処理がタイムアウトしました');
+          // アップロードしたファイルと一致するレシートを探す
+          const targetReceipt = receipts.find(r => 
+            r.originalFile.path === filePath && 
+            r.status === 'processed' &&
+            r.items.length > 0 // 商品データが存在することを確認
+          );
+
+          if (targetReceipt) {
+            console.log('Found processed receipt:', targetReceipt);
+            return targetReceipt;
           }
-        } catch (err) {
-          console.error('Error fetching updated receipts:', err);
-          setError('レシートの処理に失敗しました');
-          setIsProcessing(false);  // エラー時のみfalseに設定
+
+          // 2秒待機
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
         }
+
+        return null;
       };
+
+      // Firestoreにデータが保存されるまで待機
+      const processedReceipt = await waitForFirestoreData(file.name);
       
-      setTimeout(checkForReceipt, 2000);
+      if (processedReceipt) {
+        setSelectedReceipt(processedReceipt);
+        setError(null);
+      } else {
+        throw new Error('レシートの処理がタイムアウトしました');
+      }
 
     } catch (error) {
       console.error('File upload failed:', error);
       setError('ファイルのアップロードに失敗しました');
-      setIsProcessing(false);  // エラー時のみfalseに設定
+      setSelectedReceipt(null);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -359,22 +359,27 @@ function App() {
 
         {activeTab === 'upload' && (
           <div className="space-y-8">
-            {!selectedReceipt ? (
+            {selectedReceipt ? (
+              isProcessing ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">
+                    {selectedReceipt.status === 'processing' ? 'レシートを解析中...' : '保存中...'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {selectedReceipt.status === 'processing' ? '処理に少々時間がかかる場合があります' : ''}
+                  </p>
+                </div>
+              ) : (
+                <ReceiptAnalysis
+                  receipt={selectedReceipt}
+                  onCategorize={handleCategorize}
+                  isProcessing={isProcessing}
+                />
+              )
+            ) : (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <FileUpload onUpload={handleUpload} />
-              </div>
-            ) : (
-              <ReceiptAnalysis
-                receipt={selectedReceipt}
-                onCategorize={handleCategorize}
-                isProcessing={isProcessing}
-              />
-            )}
-
-            {isProcessing && (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="mt-4 text-gray-600">処理中...</p>
               </div>
             )}
           </div>
