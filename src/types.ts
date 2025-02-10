@@ -29,3 +29,17 @@ export interface AnalysisResult {
   totalAmount: number;
   date: string;
 }
+
+export interface ProcessedReceipt {
+  id: string;
+  originalReceiptId: string;
+  store: string;
+  amount: number;
+  category: 'expense' | 'personal';
+  processedAt: string;
+  metadata: {
+    processedAt: string;
+    store: string;
+    status: string;
+  };
+}
