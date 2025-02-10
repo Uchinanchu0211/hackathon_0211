@@ -152,11 +152,19 @@ const fetchProcessedReceiptsFromFirestore = async (): Promise<ProcessedReceipt[]
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'upload' | 'history'>('upload');
+  // ローカルストレージからタブの状態を復元、なければ'upload'をデフォルトに
+  const [activeTab, setActiveTab] = useState<'upload' | 'history'>(
+    () => (localStorage.getItem('activeTab') as 'upload' | 'history') || 'upload'
+  );
   const [processedReceipts, setProcessedReceipts] = useState<ProcessedReceipt[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+
+  // タブが変更されたときにローカルストレージに保存
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
 
   // コンポーネントマウント時にデータを取得
   useEffect(() => {
