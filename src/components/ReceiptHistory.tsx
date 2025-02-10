@@ -1,13 +1,13 @@
 import { ProcessedReceipt } from '../types';
 
 interface Props {
-  processedReceipts: ProcessedReceipt[];
+  receipts: ProcessedReceipt[];
   isLoading: boolean;
 }
 
-export const ReceiptHistory: React.FC<Props> = ({ processedReceipts, isLoading }) => {
-  const totalExpense = processedReceipts.reduce((sum, receipt) => sum + receipt.total_expense, 0);
-  const totalPersonal = processedReceipts.reduce((sum, receipt) => sum + receipt.total_personal, 0);
+export const ReceiptHistory: React.FC<Props> = ({ receipts, isLoading }) => {
+  const totalExpense = receipts.reduce((sum, receipt) => sum + receipt.total_expense, 0);
+  const totalPersonal = receipts.reduce((sum, receipt) => sum + receipt.total_personal, 0);
 
   if (isLoading) {
     return (
@@ -42,7 +42,7 @@ export const ReceiptHistory: React.FC<Props> = ({ processedReceipts, isLoading }
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {processedReceipts.map((receipt) => (
+            {receipts.map((receipt) => (
               <tr key={receipt.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {new Date(receipt.processedAt).toLocaleDateString()}
