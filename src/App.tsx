@@ -27,6 +27,52 @@ const uploadToCloudStorage = async (file: File): Promise<string> => {
   }
 };
 
+const parseReceiptText = (text: string): {
+  store_name: string;
+  items: ReceiptItem[];
+  total_amount: number;
+  date: string;
+} => {
+  const lines = text.split('\n');
+  
+  // 店舗名の抽出（最初の行から）
+  const store_name = lines[0].trim();
+
+  // 日付の抽出（YYYY/MM/DD形式を探す）
+  const dateMatch = text.match(/(\d{4}\/\d{1,2}\/\d{1,2})/);
+  const date = dateMatch ? dateMatch[1] : new Date().toISOString();
+
+  // 商品と金額の抽出
+  // この例では「商品名 ¥金額」のパターンを探します
+  const items: ReceiptItem[] = [];
+  const itemMatches = text.match(/([^\d¥]+)\s*¥\s*(\d+)/g);
+  if (itemMatches) {
+    itemMatches.forEach((match, index) => {
+      const [name, priceStr] = match.split('¥').map(s => s.trim());
+      const price = parseInt(priceStr.replace(/,/g, ''), 10);
+      if (!isNaN(price) && price > 0) {
+        items.push({
+          id: `item-${index}`,
+          name,
+          price,
+          category: 'unclassified'
+        });
+      }
+    });
+  }
+
+  // 合計金額の抽出（最後の数値を探す）
+  const totalMatch = text.match(/合計\s*¥?\s*(\d+)/);
+  const total_amount = totalMatch ? parseInt(totalMatch[1], 10) : 0;
+
+  return {
+    store_name,
+    items,
+    total_amount,
+    date
+  };
+};
+
 // Firestoreからデータを取得する関数を修正
 const fetchReceiptsFromFirestore = async (): Promise<Receipt[]> => {
   try {
@@ -40,28 +86,28 @@ const fetchReceiptsFromFirestore = async (): Promise<Receipt[]> => {
     );
 
     const documents = response.data.documents || [];
-    const receipts = documents.map((doc: any) => ({
-      id: doc.name.split('/').pop(),
-      items: (doc.fields.items?.arrayValue?.values || []).map((item: any) => ({
-        id: item.mapValue.fields.id?.stringValue || '',
-        name: item.mapValue.fields.name?.stringValue || '',
-        price: Number(item.mapValue.fields.price?.integerValue || 0),
-        category: 'unclassified' as const
-      })),
-      store_name: doc.fields.store_name?.stringValue || '',
-      total_amount: Number(doc.fields.total_amount?.integerValue || 0),
-      metadata: {
-        processedAt: doc.fields.metadata?.mapValue?.fields?.processedAt?.stringValue || new Date().toISOString(),
-        status: doc.fields.metadata?.mapValue?.fields?.status?.stringValue || 'processed',
-        updatedAt: doc.fields.metadata?.mapValue?.fields?.updatedAt?.stringValue || new Date().toISOString()
-      },
-      originalFile: {
-        bucket: doc.fields.originalFile?.mapValue?.fields?.bucket?.stringValue || '',
-        name: doc.fields.originalFile?.mapValue?.fields?.name?.stringValue || '',
-        path: doc.fields.originalFile?.mapValue?.fields?.path?.stringValue || ''
-      },
-      status: doc.fields.status?.stringValue || 'processed'
-    }));
+    const receipts = documents.map((doc: any) => {
+      const rawText = doc.fields.rawText?.stringValue || '';
+      const parsedData = parseReceiptText(rawText);
+
+      return {
+        id: doc.name.split('/').pop(),
+        items: parsedData.items,
+        store_name: parsedData.store_name,
+        total_amount: parsedData.total_amount,
+        metadata: {
+          processedAt: parsedData.date,
+          status: doc.fields.status?.stringValue || 'processed',
+          updatedAt: doc.fields.metadata?.mapValue?.fields?.updatedAt?.stringValue || new Date().toISOString()
+        },
+        originalFile: {
+          bucket: doc.fields.originalFile?.mapValue?.fields?.bucket?.stringValue || '',
+          name: doc.fields.originalFile?.mapValue?.fields?.name?.stringValue || '',
+          path: doc.fields.originalFile?.mapValue?.fields?.path?.stringValue || ''
+        },
+        status: doc.fields.status?.stringValue || 'processed'
+      };
+    });
 
     return receipts;
   } catch (error) {
