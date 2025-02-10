@@ -1,9 +1,10 @@
 export interface Receipt {
   id: string;
-  fullText: string;
+  items: ReceiptItem[];
+  store_name: string;
+  total_amount: number;
   metadata: {
     processedAt: string;
-    store: string;
     status: string;
     updatedAt: string;
   };
@@ -12,16 +13,14 @@ export interface Receipt {
     name: string;
     path: string;
   };
-  rawText: string;
   status: 'processed' | 'processing' | 'error';
-  store: string;
 }
 
 export interface ReceiptItem {
   id: string;
   name: string;
   price: number;
-  category: 'business' | 'personal' | 'unclassified';
+  category: 'expense' | 'personal' | 'unclassified';
 }
 
 export interface AnalysisResult {

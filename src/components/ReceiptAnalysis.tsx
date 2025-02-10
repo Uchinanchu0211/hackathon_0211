@@ -1,15 +1,37 @@
-import { Receipt } from '../types';
-import { Calendar, DollarSign } from 'lucide-react';
-import { extractTotalAmount } from '../utils';
+import { Receipt, ReceiptItem } from '../types';
+import { Calendar, Tag } from 'lucide-react';
+import { useState } from 'react';
 
 interface ReceiptAnalysisProps {
   receipt: Receipt;
-  onCategorize: (category: 'expense' | 'personal') => void;
+  onCategorize: (items: ReceiptItem[]) => void;
   isProcessing: boolean;
 }
 
 export function ReceiptAnalysis({ receipt, onCategorize, isProcessing }: ReceiptAnalysisProps) {
-  const amount = extractTotalAmount(receipt.rawText);
+  const [items, setItems] = useState<ReceiptItem[]>(
+    receipt.items.map(item => ({ ...item, category: 'unclassified' as const }))
+  );
+
+  const totalExpense = items
+    .filter(item => item.category === 'expense')
+    .reduce((sum, item) => sum + item.price, 0);
+
+  const totalPersonal = items
+    .filter(item => item.category === 'personal')
+    .reduce((sum, item) => sum + item.price, 0);
+
+  const handleItemCategorize = (itemId: string, category: 'expense' | 'personal') => {
+    setItems(prevItems =>
+      prevItems.map(item =>
+        item.id === itemId ? { ...item, category } : item
+      )
+    );
+  };
+
+  const handleSave = () => {
+    onCategorize(items);
+  };
 
   if (isProcessing) {
     return (
@@ -33,37 +55,62 @@ export function ReceiptAnalysis({ receipt, onCategorize, isProcessing }: Receipt
           <span className="text-lg">{receipt.metadata.processedAt}</span>
         </div>
         <div className="flex items-center space-x-4">
-          <DollarSign className="text-gray-500" />
-          <span className="text-lg font-bold">¥{amount.toLocaleString()}</span>
+          <Tag className="text-gray-500" />
+          <span className="text-lg">{receipt.store_name}</span>
         </div>
       </div>
 
       <div className="space-y-4">
-        <div className="p-4 bg-gray-50 rounded-lg">
-          <p className="font-medium">店舗名: {receipt.store || '不明'}</p>
-          <p className="text-gray-600 mt-2">レシート内容:</p>
-          <pre className="mt-2 p-2 bg-gray-100 rounded whitespace-pre-wrap">
-            {receipt.rawText}
-          </pre>
+        {items.map((item) => (
+          <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="flex-1">
+              <p className="font-medium">{item.name}</p>
+              <p className="text-gray-600">¥{item.price.toLocaleString()}</p>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleItemCategorize(item.id, 'expense')}
+                className={`px-4 py-2 rounded-full text-sm ${
+                  item.category === 'expense'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-blue-100'
+                }`}
+              >
+                経費
+              </button>
+              <button
+                onClick={() => handleItemCategorize(item.id, 'personal')}
+                className={`px-4 py-2 rounded-full text-sm ${
+                  item.category === 'personal'
+                    ? 'bg-purple-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-purple-100'
+                }`}
+              >
+                私費
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-4 p-4 bg-gray-100 rounded-lg">
+        <div>
+          <p className="text-sm text-gray-600">経費合計</p>
+          <p className="text-lg font-bold text-blue-600">¥{totalExpense.toLocaleString()}</p>
+        </div>
+        <div>
+          <p className="text-sm text-gray-600">私費合計</p>
+          <p className="text-lg font-bold text-purple-600">¥{totalPersonal.toLocaleString()}</p>
         </div>
       </div>
 
-      <div className="mt-6 space-y-2">
-        <button
-          onClick={() => onCategorize('expense')}
-          disabled={isProcessing}
-          className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-        >
-          経費として登録
-        </button>
-        <button
-          onClick={() => onCategorize('personal')}
-          disabled={isProcessing}
-          className="w-full py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:opacity-50"
-        >
-          私費として登録
-        </button>
-      </div>
+      <button
+        onClick={handleSave}
+        disabled={items.some(item => item.category === 'unclassified')}
+        className="mt-6 w-full py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        保存する
+      </button>
     </div>
   );
 }

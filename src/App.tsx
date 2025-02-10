@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FileUpload } from './components/FileUpload';
 import { ReceiptHistory } from './components/ReceiptHistory';
-import { Receipt, ProcessedReceipt } from './types';
+import { Receipt, ProcessedReceipt, ReceiptItem } from './types';
 import { Receipt as ReceiptScanner, FileText, History } from 'lucide-react';
-import { extractTotalAmount } from './utils';
 import { ReceiptAnalysis } from './components/ReceiptAnalysis';
 
 // Cloud Storage へのアップロード関数
@@ -40,16 +39,19 @@ const fetchReceiptsFromFirestore = async (): Promise<Receipt[]> => {
       }
     );
 
-    console.log('Firestore Response:', response.data);
-
-    // Firestoreのレスポンスから必要なデータを抽出
     const documents = response.data.documents || [];
     const receipts = documents.map((doc: any) => ({
       id: doc.name.split('/').pop(),
-      fullText: doc.fields.fullText?.stringValue || '',
+      items: (doc.fields.items?.arrayValue?.values || []).map((item: any) => ({
+        id: item.mapValue.fields.id?.stringValue || '',
+        name: item.mapValue.fields.name?.stringValue || '',
+        price: Number(item.mapValue.fields.price?.integerValue || 0),
+        category: 'unclassified' as const
+      })),
+      store_name: doc.fields.store_name?.stringValue || '',
+      total_amount: Number(doc.fields.total_amount?.integerValue || 0),
       metadata: {
         processedAt: doc.fields.metadata?.mapValue?.fields?.processedAt?.stringValue || new Date().toISOString(),
-        store: doc.fields.metadata?.mapValue?.fields?.store?.stringValue || '',
         status: doc.fields.metadata?.mapValue?.fields?.status?.stringValue || 'processed',
         updatedAt: doc.fields.metadata?.mapValue?.fields?.updatedAt?.stringValue || new Date().toISOString()
       },
@@ -58,12 +60,9 @@ const fetchReceiptsFromFirestore = async (): Promise<Receipt[]> => {
         name: doc.fields.originalFile?.mapValue?.fields?.name?.stringValue || '',
         path: doc.fields.originalFile?.mapValue?.fields?.path?.stringValue || ''
       },
-      rawText: doc.fields.rawText?.stringValue || '',
-      status: doc.fields.status?.stringValue || 'processed',
-      store: doc.fields.store?.stringValue || ''
+      status: doc.fields.status?.stringValue || 'processed'
     }));
 
-    console.log('Processed Receipts:', receipts);
     return receipts;
   } catch (error) {
     console.error('Error fetching from Firestore:', error);
@@ -141,10 +140,11 @@ function App() {
       // 最新のレシートを選択状態にする（ローディング表示のため）
       setSelectedReceipt({ 
         id: 'loading',
-        fullText: '',
+        items: [],
+        store_name: '',
+        total_amount: 0,
         metadata: {
           processedAt: new Date().toISOString(),
-          store: '',
           status: 'processing',
           updatedAt: new Date().toISOString()
         },
@@ -153,9 +153,7 @@ function App() {
           name: '',
           path: ''
         },
-        rawText: '',
-        status: 'processing',
-        store: ''
+        status: 'processing'
       });
       
       // Cloud Functionsの処理を待つ
@@ -193,24 +191,39 @@ function App() {
     }
   };
 
-  const saveProcessedReceipt = async (receipt: Receipt, category: 'expense' | 'personal') => {
+  const saveProcessedReceipt = async (items: ReceiptItem[]) => {
+    if (!selectedReceipt) return;
+
     try {
       const processedData = {
         fields: {
-          originalReceiptId: { stringValue: receipt.id },
-          store: { stringValue: receipt.store || '' },
-          amount: { integerValue: extractTotalAmount(receipt.rawText) },
-          category: { stringValue: category },
-          processedAt: { timestampValue: new Date().toISOString() },
-          metadata: {
-            mapValue: {
-              fields: {
-                processedAt: { stringValue: new Date().toISOString() },
-                store: { stringValue: receipt.store || '' },
-                status: { stringValue: 'categorized' }
-              }
+          originalReceiptId: { stringValue: selectedReceipt.id },
+          store: { stringValue: selectedReceipt.store_name },
+          items: {
+            arrayValue: {
+              values: items.map(item => ({
+                mapValue: {
+                  fields: {
+                    id: { stringValue: item.id },
+                    name: { stringValue: item.name },
+                    price: { integerValue: item.price },
+                    category: { stringValue: item.category }
+                  }
+                }
+              }))
             }
-          }
+          },
+          total_expense: { 
+            integerValue: items
+              .filter(item => item.category === 'expense')
+              .reduce((sum, item) => sum + item.price, 0)
+          },
+          total_personal: {
+            integerValue: items
+              .filter(item => item.category === 'personal')
+              .reduce((sum, item) => sum + item.price, 0)
+          },
+          processedAt: { timestampValue: new Date().toISOString() }
         }
       };
 
@@ -225,7 +238,6 @@ function App() {
         }
       );
 
-      // 両方のデータを更新
       const updatedProcessedReceipts = await fetchProcessedReceiptsFromFirestore();
       setProcessedReceipts(updatedProcessedReceipts);
       setSelectedReceipt(null);
@@ -235,13 +247,13 @@ function App() {
     }
   };
 
-  // 経費/私費ボタンのハンドラーを追加
-  const handleCategorize = async (category: 'expense' | 'personal') => {
+  // 経費/私費ボタンのハンドラーを修正
+  const handleCategorize = async (items: ReceiptItem[]) => {
     if (!selectedReceipt) return;
     
     setIsProcessing(true);
     try {
-      await saveProcessedReceipt(selectedReceipt, category);
+      await saveProcessedReceipt(items);
     } catch (error) {
       console.error('Failed to categorize receipt:', error);
       setError('レシートの分類に失敗しました');
