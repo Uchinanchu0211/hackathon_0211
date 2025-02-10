@@ -128,22 +128,25 @@ const fetchProcessedReceiptsFromFirestore = async (): Promise<ProcessedReceipt[]
       }
     );
 
+    console.log('Fetched processed receipts response:', response.data);
+
     const documents = response.data.documents || [];
     return documents.map((doc: any) => ({
       id: doc.name.split('/').pop(),
+      items: (doc.fields.items?.arrayValue?.values || []).map((item: any) => ({
+        id: item.mapValue.fields.id.stringValue,
+        name: item.mapValue.fields.name.stringValue,
+        price: Number(item.mapValue.fields.price.integerValue),
+        category: item.mapValue.fields.category.stringValue
+      })),
       originalReceiptId: doc.fields.originalReceiptId?.stringValue || '',
       store: doc.fields.store?.stringValue || '',
-      amount: Number(doc.fields.amount?.integerValue || 0),
-      category: doc.fields.category?.stringValue || 'expense',
-      processedAt: doc.fields.processedAt?.timestampValue || '',
-      metadata: {
-        processedAt: doc.fields.metadata?.mapValue?.fields?.processedAt?.stringValue || '',
-        store: doc.fields.metadata?.mapValue?.fields?.store?.stringValue || '',
-        status: doc.fields.metadata?.mapValue?.fields?.status?.stringValue || ''
-      }
+      processedAt: doc.fields.processedAt?.timestampValue || new Date().toISOString(),
+      total_expense: Number(doc.fields.total_expense?.integerValue || 0),
+      total_personal: Number(doc.fields.total_personal?.integerValue || 0)
     }));
   } catch (error) {
-    console.error('Error fetching from Firestore:', error);
+    console.error('Error fetching processed receipts:', error);
     return [];
   }
 };
@@ -237,14 +240,23 @@ function App() {
     }
   };
 
-  const saveProcessedReceipt = async (items: ReceiptItem[]) => {
+  const handleCategorize = async (items: ReceiptItem[]) => {
     if (!selectedReceipt) return;
-
+    
+    setIsProcessing(true);
     try {
+      // 経費と私費の合計を計算
+      const total_expense = items
+        .filter(item => item.category === 'expense')
+        .reduce((sum, item) => sum + item.price, 0);
+
+      const total_personal = items
+        .filter(item => item.category === 'personal')
+        .reduce((sum, item) => sum + item.price, 0);
+
+      // レシートを保存
       const processedData = {
         fields: {
-          originalReceiptId: { stringValue: selectedReceipt.id },
-          store: { stringValue: selectedReceipt.store_name },
           items: {
             arrayValue: {
               values: items.map(item => ({
@@ -259,20 +271,15 @@ function App() {
               }))
             }
           },
-          total_expense: { 
-            integerValue: items
-              .filter(item => item.category === 'expense')
-              .reduce((sum, item) => sum + item.price, 0)
-          },
-          total_personal: {
-            integerValue: items
-              .filter(item => item.category === 'personal')
-              .reduce((sum, item) => sum + item.price, 0)
-          },
-          processedAt: { timestampValue: new Date().toISOString() }
+          originalReceiptId: { stringValue: selectedReceipt.id },
+          store: { stringValue: selectedReceipt.store_name },
+          processedAt: { timestampValue: new Date().toISOString() },
+          total_expense: { integerValue: total_expense },
+          total_personal: { integerValue: total_personal }
         }
       };
 
+      console.log('Saving processed receipt:', processedData);
       await axios.post(
         `https://firestore.googleapis.com/v1/projects/${import.meta.env.VITE_PROJECT_ID}/databases/(default)/documents/processed_receipts`,
         processedData,
@@ -284,25 +291,16 @@ function App() {
         }
       );
 
+      // 保存後に履歴を更新
       const updatedProcessedReceipts = await fetchProcessedReceiptsFromFirestore();
       setProcessedReceipts(updatedProcessedReceipts);
+      
       setSelectedReceipt(null);
+      setError(null);
+      setActiveTab('history');
     } catch (error) {
-      console.error('Error saving processed receipt:', error);
+      console.error('Failed to save receipt:', error);
       setError('レシートの保存に失敗しました');
-    }
-  };
-
-  // 経費/私費ボタンのハンドラーを修正
-  const handleCategorize = async (items: ReceiptItem[]) => {
-    if (!selectedReceipt) return;
-    
-    setIsProcessing(true);
-    try {
-      await saveProcessedReceipt(items);
-    } catch (error) {
-      console.error('Failed to categorize receipt:', error);
-      setError('レシートの分類に失敗しました');
     } finally {
       setIsProcessing(false);
     }

@@ -31,14 +31,15 @@ export interface AnalysisResult {
 
 export interface ProcessedReceipt {
   id: string;
+  items: {
+    id: string;
+    name: string;
+    price: number;
+    category: 'expense' | 'personal';
+  }[];
   originalReceiptId: string;
-  store: string;
-  amount: number;
-  category: 'expense' | 'personal';
   processedAt: string;
-  metadata: {
-    processedAt: string;
-    store: string;
-    status: string;
-  };
+  store: string;
+  total_expense: number;
+  total_personal: number;
 }

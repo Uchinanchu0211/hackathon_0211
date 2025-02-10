@@ -1,42 +1,33 @@
 import { ProcessedReceipt } from '../types';
 
-interface ReceiptHistoryProps {
+interface Props {
   processedReceipts: ProcessedReceipt[];
   isLoading: boolean;
 }
 
-export function ReceiptHistory({ processedReceipts, isLoading }: ReceiptHistoryProps) {
+export const ReceiptHistory: React.FC<Props> = ({ processedReceipts, isLoading }) => {
+  const totalExpense = processedReceipts.reduce((sum, receipt) => sum + receipt.total_expense, 0);
+  const totalPersonal = processedReceipts.reduce((sum, receipt) => sum + receipt.total_personal, 0);
+
   if (isLoading) {
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-        <p className="mt-4 text-gray-600">データを読み込み中...</p>
+        <p className="mt-4 text-gray-600">履歴を読み込み中...</p>
       </div>
     );
   }
 
-  const totalExpense = processedReceipts
-    .filter(receipt => receipt.category === 'expense')
-    .reduce((sum, receipt) => sum + receipt.amount, 0);
-
-  const totalPersonal = processedReceipts
-    .filter(receipt => receipt.category === 'personal')
-    .reduce((sum, receipt) => sum + receipt.amount, 0);
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">経費合計</h3>
-          <p className="text-2xl font-bold text-blue-600">
-            ¥{totalExpense.toLocaleString()}
-          </p>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">経費合計</h3>
+          <p className="text-3xl font-bold text-blue-600">¥{totalExpense.toLocaleString()}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">私費合計</h3>
-          <p className="text-2xl font-bold text-purple-600">
-            ¥{totalPersonal.toLocaleString()}
-          </p>
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">私費合計</h3>
+          <p className="text-3xl font-bold text-green-600">¥{totalPersonal.toLocaleString()}</p>
         </div>
       </div>
 
@@ -44,40 +35,26 @@ export function ReceiptHistory({ processedReceipts, isLoading }: ReceiptHistoryP
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                日付
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                店舗
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                金額
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                区分
-              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日付</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">店舗</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">経費金額</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">私費金額</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {processedReceipts.map((receipt) => (
               <tr key={receipt.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {new Date(receipt.processedAt).toLocaleDateString('ja-JP')}
+                  {new Date(receipt.processedAt).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {receipt.store}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  ¥{receipt.amount.toLocaleString()}
+                  ¥{receipt.total_expense.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    receipt.category === 'expense' 
-                      ? 'bg-blue-100 text-blue-800' 
-                      : 'bg-purple-100 text-purple-800'
-                  }`}>
-                    {receipt.category === 'expense' ? '経費' : '私費'}
-                  </span>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  ¥{receipt.total_personal.toLocaleString()}
                 </td>
               </tr>
             ))}
@@ -86,4 +63,4 @@ export function ReceiptHistory({ processedReceipts, isLoading }: ReceiptHistoryP
       </div>
     </div>
   );
-}
+};
