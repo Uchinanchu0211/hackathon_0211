@@ -1,69 +1,131 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { FileUpload } from './components/FileUpload';
-import { ReceiptAnalysis } from './components/ReceiptAnalysis';
 import { ReceiptHistory } from './components/ReceiptHistory';
-import { Receipt, ReceiptItem } from './types';
+import { Receipt } from './types';
 import { Receipt as ReceiptScanner, FileText, History } from 'lucide-react';
+import { extractTotalAmount } from './utils';
 
-// モックデータ生成
-const mockAnalyzeReceipt = async (file: File): Promise<Receipt> => {
-  // 実際のアプリケーションではGoogle Cloud Document AIなどと連携
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const mockItems: ReceiptItem[] = [
-        { id: '1', name: 'コーヒー', price: 500, category: 'unclassified' },
-        { id: '2', name: 'ノートPC', price: 150000, category: 'unclassified' },
-        { id: '3', name: '文具セット', price: 2000, category: 'unclassified' },
-      ];
+// Cloud Storage へのアップロード関数
+const uploadToCloudStorage = async (file: File): Promise<string> => {
+  try {
+    const response = await axios.post(
+      `https://storage.googleapis.com/upload/storage/v1/b/save-reciept/o?uploadType=media&name=${file.name}`,
+      file,
+      {
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_ACCESS_TOKEN}`,
+          'Content-Type': file.type
+        },
+      }
+    );
 
-      resolve({
-        id: Math.random().toString(36).substr(2, 9),
-        imageUrl: URL.createObjectURL(file),
-        date: new Date().toLocaleDateString(),
-        totalAmount: mockItems.reduce((sum, item) => sum + item.price, 0),
-        items: mockItems,
-        status: 'analyzed'
-      });
-    }, 1500);
-  });
+    return response.data.mediaLink;
+  } catch (error) {
+    console.error('Error uploading to Cloud Storage:', error);
+    throw new Error('Upload to Cloud Storage failed');
+  }
+};
+
+// Firestoreからデータを取得する関数を修正
+const fetchReceiptsFromFirestore = async (): Promise<Receipt[]> => {
+  try {
+    const response = await axios.get(
+      `https://firestore.googleapis.com/v1/projects/${import.meta.env.VITE_PROJECT_ID}/databases/(default)/documents/receipts`,
+      {
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_ACCESS_TOKEN}`,
+        }
+      }
+    );
+
+    console.log('Firestore Response:', response.data);
+
+    // Firestoreのレスポンスから必要なデータを抽出
+    const documents = response.data.documents || [];
+    const receipts = documents.map((doc: any) => ({
+      id: doc.name.split('/').pop(),
+      fullText: doc.fields.fullText?.stringValue || '',
+      metadata: {
+        processedAt: doc.fields.metadata?.mapValue?.fields?.processedAt?.stringValue || new Date().toISOString(),
+        store: doc.fields.metadata?.mapValue?.fields?.store?.stringValue || '',
+        status: doc.fields.metadata?.mapValue?.fields?.status?.stringValue || 'processed',
+        updatedAt: doc.fields.metadata?.mapValue?.fields?.updatedAt?.stringValue || new Date().toISOString()
+      },
+      originalFile: {
+        bucket: doc.fields.originalFile?.mapValue?.fields?.bucket?.stringValue || '',
+        name: doc.fields.originalFile?.mapValue?.fields?.name?.stringValue || '',
+        path: doc.fields.originalFile?.mapValue?.fields?.path?.stringValue || ''
+      },
+      rawText: doc.fields.rawText?.stringValue || '',
+      status: doc.fields.status?.stringValue || 'processed',
+      store: doc.fields.store?.stringValue || ''
+    }));
+
+    console.log('Processed Receipts:', receipts);
+    return receipts;
+  } catch (error) {
+    console.error('Error fetching from Firestore:', error);
+    return [];
+  }
 };
 
 function App() {
   const [activeTab, setActiveTab] = useState<'upload' | 'history'>('upload');
-  const [currentReceipt, setCurrentReceipt] = useState<Receipt | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+
+  // コンポーネントマウント時にデータを取得
+  useEffect(() => {
+    const loadReceipts = async () => {
+      try {
+        setIsProcessing(true);
+        const fetchedReceipts = await fetchReceiptsFromFirestore();
+        setReceipts(fetchedReceipts);
+        setError(null);
+      } catch (err) {
+        setError('レシートデータの取得に失敗しました');
+        console.error('Failed to load receipts:', err);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    
+    loadReceipts();
+  }, []);
 
   const handleUpload = async (files: File[]) => {
     setIsProcessing(true);
     try {
       const file = files[0];
-      const analyzedReceipt = await mockAnalyzeReceipt(file);
-      setCurrentReceipt(analyzedReceipt);
-      setReceipts(prev => [analyzedReceipt, ...prev]);
+      console.log('Uploading file:', file.name, 'Type:', file.type); // ファイル情報の確認
+
+      const fileUrl = await uploadToCloudStorage(file);
+      console.log('File uploaded to:', fileUrl);
+      
+      // アップロード成功後、少し待ってからFirestoreのデータを取得
+      // Cloud Functionsの処理に時間がかかるため
+      setTimeout(async () => {
+        try {
+          const updatedReceipts = await fetchReceiptsFromFirestore();
+          setReceipts(updatedReceipts);
+          // 最新のレシートを選択状態にする
+          if (updatedReceipts.length > 0) {
+            setSelectedReceipt(updatedReceipts[0]);
+          }
+        } catch (err) {
+          console.error('Error fetching updated receipts:', err);
+        }
+      }, 5000); // 5秒待つ
+
     } catch (error) {
-      console.error('Receipt analysis failed:', error);
+      console.error('File upload failed:', error);
+      setError('ファイルのアップロードに失敗しました');
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleUpdateCategory = (itemId: string, category: 'business' | 'personal') => {
-    if (!currentReceipt) return;
-
-    const updatedReceipt = {
-      ...currentReceipt,
-      items: currentReceipt.items.map(item =>
-        item.id === itemId ? { ...item, category } : item
-      )
-    };
-
-    setCurrentReceipt(updatedReceipt);
-    setReceipts(prev =>
-      prev.map(receipt =>
-        receipt.id === updatedReceipt.id ? updatedReceipt : receipt
-      )
-    );
   };
 
   return (
@@ -99,34 +161,84 @@ function App() {
             }`}
           >
             <History className="w-5 h-5" />
-            <span>履歴</span>
+            <span>履歴・分析</span>
           </button>
         </div>
 
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
         {activeTab === 'upload' && (
           <div className="space-y-8">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <FileUpload onUpload={handleUpload} />
-            </div>
+            {!selectedReceipt ? (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <FileUpload onUpload={handleUpload} />
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">レシート分析</h3>
+                  <button
+                    onClick={() => setSelectedReceipt(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    新規アップロードに戻る
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    {/* レシート画像の表示 */}
+                    <img
+                      src={selectedReceipt.originalFile.path}
+                      alt="Receipt"
+                      className="w-full rounded-lg shadow"
+                    />
+                  </div>
+                  <div>
+                    {/* 金額仕分けUI */}
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-600">合計金額</p>
+                        <p className="text-2xl font-bold">
+                          ¥{extractTotalAmount(selectedReceipt.rawText).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => {/* 経費として処理 */}}
+                          className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                        >
+                          経費として登録
+                        </button>
+                        <button
+                          onClick={() => {/* 私費として処理 */}}
+                          className="w-full py-2 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                        >
+                          私費として登録
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {isProcessing && (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                <p className="mt-4 text-gray-600">レシートを解析中...</p>
+                <p className="mt-4 text-gray-600">処理中...</p>
               </div>
-            )}
-
-            {currentReceipt && !isProcessing && (
-              <ReceiptAnalysis
-                receipt={currentReceipt}
-                onUpdateCategory={handleUpdateCategory}
-              />
             )}
           </div>
         )}
-
         {activeTab === 'history' && (
-          <ReceiptHistory receipts={receipts} />
+          <ReceiptHistory 
+            receipts={receipts} 
+            isLoading={isProcessing}
+          />
         )}
       </main>
     </div>

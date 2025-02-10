@@ -1,10 +1,20 @@
 export interface Receipt {
   id: string;
-  imageUrl: string;
-  date: string;
-  totalAmount: number;
-  items: ReceiptItem[];
-  status: 'processing' | 'analyzed' | 'error';
+  fullText: string;
+  metadata: {
+    processedAt: string;
+    store: string;
+    status: string;
+    updatedAt: string;
+  };
+  originalFile: {
+    bucket: string;
+    name: string;
+    path: string;
+  };
+  rawText: string;
+  status: 'processed' | 'processing' | 'error';
+  store: string;
 }
 
 export interface ReceiptItem {
